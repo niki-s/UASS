@@ -8,9 +8,15 @@
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
 #include <nav_msgs/Odometry.h>
+#include <std_msgs/String.h>
+#include "geometry_msgs/Twist.h"
+#include "tf/transform_listener.h"
 
-#include<cstdio>
-#include<cstdlib>
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <cmath>
+//#include <mutex>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -18,12 +24,15 @@
 
 #include <iostream>
 #include <string.h>
+#include <vector>
 
-#include <ros/ros.h>
-#include "geometry_msgs/Twist.h"
-#include "tf/transform_listener.h"
+#define PI 3.14159265
 
+using namespace std;
 
+//Robot Driver
+//used to publish direction and angle commands to the pioneer
+//appologies in advance for not creating more appropriate functions for command
 class RobotDriver
 {
 private:
@@ -86,8 +95,8 @@ public:
       tf::Transform relative_transform = 
         start_transform.inverse() * current_transform;
       double dist_moved = relative_transform.getOrigin().length();
-		printf("%f\n",dist_moved);
-      if(dist_moved > distance) done = true;
+		printf("moved: %f\n",dist_moved);
+      if(dist_moved >= distance) done = true;
     }
     if (done)
     {
@@ -99,8 +108,8 @@ public:
   }
    bool turnOdom(bool clockwise, double radians)
   {
-    while(radians < 0) radians += 2*M_PI;
-    while(radians > 2*M_PI) radians -= 2*M_PI;
+    while(radians < 0) radians += 2*PI;
+    while(radians > 2*PI) radians -= 2*PI;
 
     //wait for the listener to get the first message
     listener_.waitForTransform("base_link", "odom", 
@@ -148,12 +157,14 @@ public:
       tf::Vector3 actual_turn_axis = 
         relative_transform.getRotation().getAxis();
       double angle_turned = relative_transform.getRotation().getAngle();
+      printf("angle turned: %f\n", angle_turned);
+      
       if ( fabs(angle_turned) < 1.0e-2) continue;
 
       if ( actual_turn_axis.dot( desired_turn_axis ) < 0 ) 
-        angle_turned = 2 * M_PI - angle_turned;
+        angle_turned = 2 * PI - angle_turned;
 
-      if (angle_turned > radians) done = true;
+      if (angle_turned >= radians) done = true;
     }
     if (done)
     {
@@ -177,13 +188,21 @@ socklen_t addrlen = sizeof(remaddr);
 int recvlen;
 int fd;
 
+char myID [256];
+
 // waits for a UDP message from Unity to arrive and turns message into a string
 void receiveUnityCommand(char* command);
 
 // processes the command to find out and return:
 // how much to turn in what direction
 // how far to travel
-void processCommand(char* command, double &distance, double &radius, bool &clockwise);
+void processCommand(char* command, double& dist, double& rad);
+
+//given position wanted, returns calculated distance from position variables
+double calculateDistance(double x, double y, double z);
+
+//given position wanted, returns calculated radians to turn to face new position
+double calculateAngle(double x, double y, double z);
 
 // publishes the wanted command to pioneer odometry
 // distance is the distance wanted traversed
@@ -192,9 +211,22 @@ void processCommand(char* command, double &distance, double &radius, bool &clock
 void commandPioneer(RobotDriver* driver, const double distance, const double radians, const bool clockwise);
 
 //callback for receiving unit ID
+//callback sets global variables for position x, y, and z
 void callback(const std_msgs::StringConstPtr& str);
 
-//RobotDriver test main
+//callback for odometry information
+void poseCallback(const nav_msgs::Odometry::ConstPtr& odomsg);
+
+//tokenizer to parse udp message
+vector<string> Tokenizer(string str);
+
+
+//--globals
+//position
+double x, y, z = 0;
+
+//**********//
+
 int main (int argc, char** argv)
 {
 	int fakeArgc = 1;
@@ -207,7 +239,7 @@ int main (int argc, char** argv)
 	RobotDriver driver(n);
 	double dist;
 	double rad;
-	bool clockw;
+	bool clockw = true;
 	
 	char clientIP[256];
 	char buffer[256];
@@ -230,45 +262,55 @@ int main (int argc, char** argv)
 		printf("ERROR CREATING SOCKET\n");
 		return 0;
 	}
+	else
+	{
+		printf("Socket bound\n");
+	}
 	
 	// bind receive socket to read port 8054
 	memset((char*)&myaddr,0,sizeof(myaddr));
 	myaddr.sin_family = AF_INET;
 	myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	myaddr.sin_port = htons(8054);
+	myaddr.sin_port = htons(8052);
 
 	if(bind(fd, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
 	{
 		printf("ERROR BINDING SOCKET\n");
 		return 0;
 	}
-	
-	
-	
-	//subscribe to id_pub which recieves the ID of the current unit
-	ros::Subscriberid_sub = n.subscribe("current_ID", 1, callback);
-	
-	//while ros is running continue to recieve commands and relay to pioneer
-	while(ros::ok())
+	else
 	{
-		receiveUnityCommand(myCommand);
-		printf("%s", myCommand);
-		//if (myCommand[0] == 1)	//this is an id assignment
-		//
-		//if (myCommand[0] == 2)    //this is a move command, do below
-		processCommand(myCommand, dist, rad, clockw);
-		//commandPioneer(&driver, dist, rad, clockw);
-		
-		//should also include later
-		//if (myCommand[0] == --anything else--)    //does other things
+		printf("Socket bound\n");
 	}
 	
+	string name = n.resolveName("/RosAria/Pose");
 	
-
-	//driver.driveForwardOdom(1.0);
-	//driver.turnOdom(false, 1.4);
+	//subscribe to id_sub which recieves the ID of the current unit
+	ros::Subscriber id_sub = n.subscribe("current_ID", 1, callback);
 	
+	//subscribe to odometry information for current position
+	//ros::Subscriber odo_sub = n.subscribe<nav_msgs::Odometry>(name, 1, poseCallback);
+	ros::Subscriber odo_sub = n.subscribe<nav_msgs::Odometry>("RosAria/pose", 1, poseCallback);
+	//while ros is running continue to recieve commands and relay to pioneer
+	
+	ros::spinOnce();
+	
+	while(1)
+	{		
+		ros::spinOnce();
+		
+		receiveUnityCommand(myCommand);
+		printf("%s\n", myCommand);
+		
+		processCommand(myCommand, dist, rad);
+		commandPioneer(&driver, dist, rad, clockw);
+		
+		ros::spinOnce();
+		
+		printf("New Position: (%.4f,%.4f,%.4f) \n", x, y, z);
+	}
 	return 0;
+	
 }
 
 void receiveUnityCommand(char* command)
@@ -282,11 +324,13 @@ void receiveUnityCommand(char* command)
 		recvlen = recvfrom(fd, buffer, 256, 0, (struct sockaddr*)&remaddr, &addrlen);
 		buffer[recvlen] = '\0';
 		
+		printf(".");
+		
 		//if the message is a command message
 		if(buffer[0] == '2')
 		{
 			waiting = false;
-			printf("Command Received!\n");
+			printf("\nCommand Received!\n");
 			int i = 2;
 			int j = 0;
 			while(buffer[i] != '\0' && buffer[i] < 123)
@@ -303,17 +347,106 @@ void receiveUnityCommand(char* command)
 	delete myCommand;
 }
 
-void processCommand(char* command, double &distance, double &radius, bool &clockwise)
+void processCommand(char* command, double& dist, double& rad)
 {
+	double cmndX, cmndY, cmndZ = 0.0;
+	const char * temp;
+	
+	//first, extract the wanted position from the command using tokenizer
+	vector<string> tokens = Tokenizer(command);
+	
+	//use a temporary const char* to convert string in vector to cstring
+	//then convert this cstring into a float for further command processing
+	temp = tokens[2].c_str();
+	cmndY = atof(temp);
+	temp = tokens[3].c_str();
+	cmndZ = atof(temp);
+	temp = tokens[4].c_str();
+	cmndX = atof(temp);
+	
+	printf("%f, %f, %f\n", cmndX, cmndY, cmndZ);
+	
+	//determine the distance to rotate
+	//determines direction to rotate through clockw(ise) boolean
+	rad = calculateAngle(cmndX, cmndY, cmndZ);	
+	//determine the distance to travel
+	dist = calculateDistance(cmndX, cmndY, cmndZ);
+}
+
+double calculateDistance(double cmndX, double cmndY, double cmndZ)
+{
+	double dist = 0;
+	dist = sqrt(pow((cmndX - x),2)+pow((cmndY - y),2));
+	printf("Distance: %f\n", dist);
+	return dist;
+}
+
+double calculateAngle(double cmndX, double cmndY, double cmndZ)
+{
+	double rad = 0;
+	printf("Commanded: %f, %f, %f\nCurrent: %f, %f, %f\n", cmndX, cmndY, cmndZ, x, y, z);
+	
+	
+	rad = atan2((cmndX - x), (cmndY - y));
+	//adjust for lack of sensors, it generally overshoots right now
+	rad = rad - (rad*0.1);
+	printf("Angle to move: %f\n", rad);
+	return rad;
+
 }
 
 void commandPioneer(RobotDriver* driver, const double distance, const double radians, const bool clockwise)
 {
+	//slight movement even when called with 0 rad
+	if (radians != 0)
+	{
+		(*driver).turnOdom(clockwise, radians);
+	}
 	(*driver).driveForwardOdom(distance);
-	(*driver).turnOdom(clockwise, radians);
+	
 }
 
 void callback(const std_msgs::StringConstPtr& str)
 {
-//finish this
+	char id [256];
+	int index = 0;
+	while((*str).data[index] != '\0')
+	{
+		id[index] = (*str).data[index];
+		index++;
+	}
+	id[index] = '\0';
+	
+	if (strcmp(id, myID) != 0)
+	{
+		strcpy(myID, id);
+	}
+}
+
+void poseCallback(const nav_msgs::Odometry::ConstPtr& odomsg)
+{	
+	x = odomsg->pose.pose.position.x;
+	y = odomsg->pose.pose.position.y;
+	z = odomsg->pose.pose.position.z;
+	ROS_INFO("Odo");
+}
+
+vector<string> Tokenizer(string str)
+{
+	vector<string> tokens;
+	// Skip delimiters at beginning.
+	string::size_type lastPos = str.find_first_not_of(" ", 0);
+	// Find first "non-delimiter".
+	string::size_type pos = str.find_first_of(" ", lastPos);
+	
+	while (string::npos != pos || string::npos != lastPos)
+	{
+		// Found a token, add it to the vector.	
+		tokens.push_back(str.substr(lastPos, pos - lastPos));
+		// Skip delimiters. Note the "not_of"
+		lastPos = str.find_first_not_of(" ", pos);
+		// Find next "non-delimiter"
+		pos = str.find_first_of(" ", lastPos);
+	}
+	return tokens;
 }

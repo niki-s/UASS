@@ -6,6 +6,9 @@ it to unity server
 
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/transform_datatypes.h>
+#include <geometry_msgs/Quaternion.h>
+#include <geometry_msgs/Vector3.h>
 #include <nav_msgs/Odometry.h>
 #include <std_msgs/String.h>
 
@@ -37,8 +40,29 @@ void poseCallback(const nav_msgs::Odometry::ConstPtr& odomsg)
 	char output[2048];
 	output[0] = '\0';
 
+	//create a quaternion to convert to euler angles
+	tf::Quaternion quat(odomsg->pose.pose.orientation.x,
+						odomsg->pose.pose.orientation.y,
+						odomsg->pose.pose.orientation.z,
+						odomsg->pose.pose.orientation.w);
+	
+	//euler angles
+	double roll, pitch, yaw;
+	tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+	
+	
 	//save odometry into "output"
-	sprintf(output, "3 MyID: %s x: %.4f y: %.4f z: %.4f Qua-x: %.4f Qua-y: %.4f Qua-z: %.4f Qua-w: %.4f\n",
+	//"3 MyID: %s x: %.4f y: %.4f z: %.4f Qua-x: %.4f Qua-y: %.4f Qua-z: %.4f Qua-w: %.4f\n"
+	sprintf(output, "3 %s %.4f %.4f %.4f %.4f %.4f %.4f\n",
+		myID,
+		-odomsg->pose.pose.position.y,
+		odomsg->pose.pose.position.z,
+		odomsg->pose.pose.position.x,
+		(roll*(180/3.1415)),
+		(pitch*(180/3.1415)),
+		180 - (yaw*(180/3.1415))); 
+		
+	/*sprintf(output, "3 %s %.4f %.4f %.4f %.4f %.4f %.4f %.4f \n",
 		myID,
 		-odomsg->pose.pose.position.y,
 		odomsg->pose.pose.position.z,
@@ -46,7 +70,8 @@ void poseCallback(const nav_msgs::Odometry::ConstPtr& odomsg)
 		odomsg->pose.pose.orientation.y,
 		odomsg->pose.pose.orientation.z,
 		odomsg->pose.pose.orientation.x,
-		odomsg->pose.pose.orientation.w); 
+		odomsg->pose.pose.orientation.w); 	
+	*/
 
 	//print position to terminal for visualization purposes
 	ROS_INFO(output);
@@ -87,7 +112,7 @@ int main(int argc, char** argv)
 	bzero(&servaddr,sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = inet_addr(clientIP);
-	servaddr.sin_port = htons(8052);
+	servaddr.sin_port = htons(8053);
 //////new connection information
 	// send join message to clientIP
 	char message[256];

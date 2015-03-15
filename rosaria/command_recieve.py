@@ -1,10 +1,10 @@
 import socket
 
-UDP_IP = "172.27.184.189"
-UDP_PORT = 8054
+UDP_IP = "172.27.183.165"
+UDP_PORT = 8052
 
 #command type 2, position (1,1,1)
-MESSAGE = "2 3 0 3"
+MESSAGE = "2 ID 0 .1 0 .1"
 
 print "UDP target IP:", UDP_IP
 print "UDP target port:", UDP_PORT
