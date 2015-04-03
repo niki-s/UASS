@@ -21,4 +21,5 @@ folder.
 
 To run:
 >$ roscd
+
 >$ bash start_uass_pioneer.sh
