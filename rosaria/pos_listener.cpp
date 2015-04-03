@@ -60,7 +60,7 @@ void poseCallback(const nav_msgs::Odometry::ConstPtr& odomsg)
 		odomsg->pose.pose.position.x,
 		(roll*(180/3.1415)),
 		(pitch*(180/3.1415)),
-		180 - (yaw*(180/3.1415))); 
+		-(yaw*(180/3.1415))); 
 		
 	/*sprintf(output, "3 %s %.4f %.4f %.4f %.4f %.4f %.4f %.4f \n",
 		myID,

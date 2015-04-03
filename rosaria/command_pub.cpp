@@ -7,6 +7,9 @@
 
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/transform_datatypes.h>
+#include <geometry_msgs/Quaternion.h>
+#include <geometry_msgs/Vector3.h>
 #include <nav_msgs/Odometry.h>
 #include <std_msgs/String.h>
 #include "geometry_msgs/Twist.h"
@@ -95,7 +98,7 @@ public:
       tf::Transform relative_transform = 
         start_transform.inverse() * current_transform;
       double dist_moved = relative_transform.getOrigin().length();
-		printf("moved: %f\n",dist_moved);
+		//printf("moved: %f\n",dist_moved);
       if(dist_moved >= distance) done = true;
     }
     if (done)
@@ -157,7 +160,7 @@ public:
       tf::Vector3 actual_turn_axis = 
         relative_transform.getRotation().getAxis();
       double angle_turned = relative_transform.getRotation().getAngle();
-      printf("angle turned: %f\n", angle_turned);
+      //printf("angle turned: %f\n", angle_turned);
       
       if ( fabs(angle_turned) < 1.0e-2) continue;
 
@@ -224,6 +227,7 @@ vector<string> Tokenizer(string str);
 //--globals
 //position
 double x, y, z = 0;
+double currentOri = 0;
 
 //**********//
 
@@ -297,7 +301,9 @@ int main (int argc, char** argv)
 	
 	while(1)
 	{		
+		//ros spin once for position
 		ros::spinOnce();
+		printf("current orientation: %f\n", currentOri);
 		
 		receiveUnityCommand(myCommand);
 		printf("%s\n", myCommand);
@@ -305,9 +311,10 @@ int main (int argc, char** argv)
 		processCommand(myCommand, dist, rad);
 		commandPioneer(&driver, dist, rad, clockw);
 		
+		//spin once for most up to date position to print
 		ros::spinOnce();
-		
 		printf("New Position: (%.4f,%.4f,%.4f) \n", x, y, z);
+		
 	}
 	return 0;
 	
@@ -358,11 +365,11 @@ void processCommand(char* command, double& dist, double& rad)
 	//use a temporary const char* to convert string in vector to cstring
 	//then convert this cstring into a float for further command processing
 	temp = tokens[2].c_str();
-	cmndY = atof(temp);
+	cmndX = atof(temp);
 	temp = tokens[3].c_str();
 	cmndZ = atof(temp);
 	temp = tokens[4].c_str();
-	cmndX = atof(temp);
+	cmndY = atof(temp);
 	
 	printf("%f, %f, %f\n", cmndX, cmndY, cmndZ);
 	
@@ -386,19 +393,27 @@ double calculateAngle(double cmndX, double cmndY, double cmndZ)
 	double rad = 0;
 	printf("Commanded: %f, %f, %f\nCurrent: %f, %f, %f\n", cmndX, cmndY, cmndZ, x, y, z);
 	
+	//This gives the angle between the two vectors in pi to -pi
+	rad = atan2((cmndY - y), (cmndX - x));
+
+	//translation of pi/2 for accuracy
+	printf("before translation angle: %f\n current orientation: %f\n", rad, currentOri);
 	
-	rad = atan2((cmndX - x), (cmndY - y));
-	//adjust for lack of sensors, it generally overshoots right now
-	rad = rad - (rad*0.1);
+
+	rad = rad - (currentOri+PI/2);//((currentOri*(PI/180)) + PI/2);
+
 	printf("Angle to move: %f\n", rad);
 	return rad;
-
 }
 
 void commandPioneer(RobotDriver* driver, const double distance, const double radians, const bool clockwise)
 {
 	//slight movement even when called with 0 rad
-	if (radians != 0)
+	if (radians >= 0)
+	{
+		(*driver).turnOdom(!clockwise, radians);
+	}
+	else
 	{
 		(*driver).turnOdom(clockwise, radians);
 	}
@@ -425,10 +440,22 @@ void callback(const std_msgs::StringConstPtr& str)
 
 void poseCallback(const nav_msgs::Odometry::ConstPtr& odomsg)
 {	
+	//create a quaternion to convert to euler angles
+	tf::Quaternion quat(odomsg->pose.pose.orientation.x,
+						odomsg->pose.pose.orientation.y,
+						odomsg->pose.pose.orientation.z,
+						odomsg->pose.pose.orientation.w);
+	
+	//euler angles
+	double roll, pitch;
+	tf::Matrix3x3(quat).getRPY(roll, pitch, currentOri);
+	
+	
 	x = odomsg->pose.pose.position.x;
 	y = odomsg->pose.pose.position.y;
 	z = odomsg->pose.pose.position.z;
-	ROS_INFO("Odo");
+	
+	ROS_INFO("Odo update");
 }
 
 vector<string> Tokenizer(string str)
