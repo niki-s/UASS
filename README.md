@@ -20,5 +20,5 @@ file marked start_uass_pioneer.sh should be placed outside of the
 folder.
 
 To run:
-$ roscd
-$ bash start_uass_pioneer.sh
+>$ roscd
+>$ bash start_uass_pioneer.sh
