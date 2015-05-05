@@ -55,9 +55,9 @@ void poseCallback(const nav_msgs::Odometry::ConstPtr& odomsg)
 	//"3 MyID: %s x: %.4f y: %.4f z: %.4f Qua-x: %.4f Qua-y: %.4f Qua-z: %.4f Qua-w: %.4f\n"
 	sprintf(output, "3 %s %.4f %.4f %.4f %.4f %.4f %.4f\n",
 		myID,
-		-odomsg->pose.pose.position.y,
-		odomsg->pose.pose.position.z,
 		odomsg->pose.pose.position.x,
+		odomsg->pose.pose.position.z,
+		odomsg->pose.pose.position.y,
 		(roll*(180/3.1415)),
 		(pitch*(180/3.1415)),
 		-(yaw*(180/3.1415))); 

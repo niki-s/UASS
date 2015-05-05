@@ -28,13 +28,13 @@ class ControllerNode():
 		self.MaxSpeed = .3
 		self.Speed = .3
 		
-		self.MaxTurningSpeed = .6
-		self.TurningSpeed = .6
+		self.MaxTurningSpeed = .3
+		self.TurningSpeed = .3
 		
 		#Allowed to turn and be off 5 degrees. Updates will go consistently
 		#to make sure it stays within that range
 		self.AngelTolerance = 5
-		self.DistanceTolerance = .3
+		self.DistanceTolerance = .15
 		self.ID = 0
 		#self.X = 0
 		#self.Y = 0

@@ -15,15 +15,15 @@ class CommandListenerNode():
 		#Internet, UDP
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self.sock.bind(('',8052))
-		self.sock.settimeout(1)
+		#self.sock.settimeout(1)
 		
 	def ReceiveCommand(self):
 		while self.run:
-			try:
-				data = self.sock.recv(1024)
-			except socket.timeout:
-				print("Too long since last command\nStopping")
-				self.ProcessStopCommand()
+			#try:
+			data = self.sock.recv(1024)
+			#except socket.timeout:
+			#	print("Too long since last command\nStopping")
+			#	self.ProcessStopCommand()
 			print("Received msg:" + data)
 		#Parse through command
 			self.tokens = data.split()
